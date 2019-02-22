@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cirocosta/gupload/core"
+	"github.com/asubiotto/gupload/core"
 	"golang.org/x/net/context"
 	"gopkg.in/urfave/cli.v2"
 )
@@ -38,7 +38,6 @@ var Upload = cli.Command{
 func uploadAction(c *cli.Context) (err error) {
 	var (
 		chunkSize       = c.Int("chunk-size")
-		http2           = c.Bool("http2")
 		address         = c.String("address")
 		file            = c.String("file")
 		rootCertificate = c.String("root-certificate")
@@ -67,7 +66,7 @@ func uploadAction(c *cli.Context) (err error) {
 	must(err)
 	defer client.Close()
 
-	fmt.Printf("%d\n", stat.FinishedAt.Sub(stat.StartedAt).Nanoseconds())
+	fmt.Printf("total time taken: %s\n", stat.FinishedAt.Sub(stat.StartedAt))
 
 	return
 }

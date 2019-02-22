@@ -1,12 +1,16 @@
 package core
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"strconv"
+	"sync/atomic"
+	"time"
 
-	"github.com/cirocosta/gupload/messaging"
+	"github.com/asubiotto/gupload/messaging"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
@@ -62,19 +66,6 @@ func (s *ServerGRPC) Listen() (err error) {
 		return
 	}
 
-	if s.certificate != "" && s.key != "" {
-		grpcCreds, err = credentials.NewServerTLSFromFile(
-			s.certificate, s.key)
-		if err != nil {
-			err = errors.Wrapf(err,
-				"failed to create tls grpc server using cert %s and key %s",
-				s.certificate, s.key)
-			return
-		}
-
-		grpcOpts = append(grpcOpts, grpc.Creds(grpcCreds))
-	}
-
 	s.server = grpc.NewServer(grpcOpts...)
 	messaging.RegisterGuploadServiceServer(s.server, s)
 
@@ -87,18 +78,55 @@ func (s *ServerGRPC) Listen() (err error) {
 	return
 }
 
-func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) (err error) {
+func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error {
+	f, err := os.Create("data.json")
+	if err != nil {
+		s.logger.Error().Msg(fmt.Sprintf("errors opening data file: %s", err.Error()))
+		return err
+	}
+	defer f.Close()
+
+	var bytesReceived uint64
+
+	s.logger.Info().Msg("received upload")
+	defer s.logger.Info().Msg("upload finished")
+
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		start := time.Now()
+		tick := 0
+		var lastBytesReceived uint64
+		for {
+			select {
+			case <-time.After(time.Second):
+			case <-done:
+				return
+			}
+			bytesSinceStart := atomic.LoadUint64(&bytesReceived)
+			bytesInLastSecond := bytesSinceStart - lastBytesReceived
+			bytesPerSecond := bytesSinceStart / uint64(time.Since(start).Seconds())
+			// As CSV.
+			data := fmt.Sprintf("%d,%d,%d\n", tick, bytesPerSecond, bytesInLastSecond)
+			msg := fmt.Sprintf("tick: %d, avg: %s/s, bytes since last tick: %d", tick, humanize.Bytes(bytesPerSecond), bytesInLastSecond)
+			s.logger.Info().Msg(msg)
+			f.WriteString(data)
+			tick++
+			lastBytesReceived = bytesSinceStart
+		}
+	}()
+
 	for {
-		_, err = stream.Recv()
+		c, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				goto END
 			}
 
-			err = errors.Wrapf(err,
+			return errors.Wrapf(err,
 				"failed unexpectadely while reading chunks from stream")
-			return
 		}
+		atomic.AddUint64(&bytesReceived, uint64(len(c.Content)))
 	}
 
 	s.logger.Info().Msg("upload received")
@@ -109,12 +137,11 @@ END:
 		Code:    messaging.UploadStatusCode_Ok,
 	})
 	if err != nil {
-		err = errors.Wrapf(err,
+		return errors.Wrapf(err,
 			"failed to send status code")
-		return
 	}
 
-	return
+	return nil
 }
 
 func (s *ServerGRPC) Close() {

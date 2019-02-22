@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/cirocosta/gupload/core"
+	"github.com/asubiotto/gupload/core"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -21,7 +21,6 @@ var Serve = cli.Command{
 func serveAction(c *cli.Context) (err error) {
 	var (
 		port        = c.Int("port")
-		http2       = c.Bool("http2")
 		key         = c.String("key")
 		certificate = c.String("certificate")
 		server      core.Server

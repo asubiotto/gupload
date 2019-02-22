@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cirocosta/gupload/messaging"
+	"github.com/asubiotto/gupload/messaging"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/context"
@@ -31,7 +31,7 @@ type ClientGRPCConfig struct {
 }
 
 func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
-	grpcOpts = []grpc.DialOption{}
+	var grpcOpts []grpc.DialOption
 
 	if cfg.Address == "" {
 		err = errors.Errorf("address must be specified")
