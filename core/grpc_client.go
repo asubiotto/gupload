@@ -10,8 +10,6 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	_ "google.golang.org/grpc/encoding/gzip"
 )
 
@@ -33,10 +31,7 @@ type ClientGRPCConfig struct {
 }
 
 func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
-	var (
-		grpcOpts  = []grpc.DialOption{}
-		grpcCreds credentials.TransportCredentials
-	)
+	grpcOpts = []grpc.DialOption{}
 
 	if cfg.Address == "" {
 		err = errors.Errorf("address must be specified")
@@ -48,19 +43,7 @@ func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
 			grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")))
 	}
 
-	if cfg.RootCertificate != "" {
-		grpcCreds, err = credentials.NewClientTLSFromFile(cfg.RootCertificate, "localhost")
-		if err != nil {
-			err = errors.Wrapf(err,
-				"failed to create grpc tls client via root-cert %s",
-				cfg.RootCertificate)
-			return
-		}
-
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(grpcCreds))
-	} else {
-		grpcOpts = append(grpcOpts, grpc.WithInsecure())
-	}
+	grpcOpts = append(grpcOpts, grpc.WithInsecure())
 
 	switch {
 	case cfg.ChunkSize == 0:
