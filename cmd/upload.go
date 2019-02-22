@@ -32,6 +32,10 @@ var Upload = cli.Command{
 			Name:  "compress",
 			Usage: "whether or not to enable payload compression",
 		},
+		&cli.BoolFlag{
+			Name:  "dwindow",
+			Usage: "whether to use GRPC dynamic window resizing",
+		},
 	},
 }
 
@@ -42,6 +46,7 @@ func uploadAction(c *cli.Context) (err error) {
 		file            = c.String("file")
 		rootCertificate = c.String("root-certificate")
 		compress        = c.Bool("compress")
+		dwindow         = c.Bool("dwindow")
 		client          core.Client
 	)
 
@@ -58,6 +63,7 @@ func uploadAction(c *cli.Context) (err error) {
 		RootCertificate: rootCertificate,
 		Compress:        compress,
 		ChunkSize:       chunkSize,
+		DWindow:         dwindow,
 	})
 	must(err)
 	client = &grpcClient

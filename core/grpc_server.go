@@ -3,19 +3,20 @@ package core
 import (
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/keepalive"
+
 	"github.com/asubiotto/gupload/messaging"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	_ "google.golang.org/grpc/encoding/gzip"
 )
 
@@ -25,12 +26,14 @@ type ServerGRPC struct {
 	port        int
 	certificate string
 	key         string
+	dwindow     bool
 }
 
 type ServerGRPCConfig struct {
 	Certificate string
 	Key         string
 	Port        int
+	DWindow     bool
 }
 
 func NewServerGRPC(cfg ServerGRPCConfig) (s ServerGRPC, err error) {
@@ -47,16 +50,50 @@ func NewServerGRPC(cfg ServerGRPCConfig) (s ServerGRPC, err error) {
 	s.port = cfg.Port
 	s.certificate = cfg.Certificate
 	s.key = cfg.Key
+	s.dwindow = cfg.DWindow
 
 	return
 }
 
 func (s *ServerGRPC) Listen() (err error) {
-	var (
-		listener  net.Listener
-		grpcOpts  = []grpc.ServerOption{}
-		grpcCreds credentials.TransportCredentials
-	)
+	ka := keepalive.ServerParameters{
+		Time:    3 * time.Second,
+		Timeout: 3 * time.Second,
+	}
+	ke := keepalive.EnforcementPolicy{
+		MinTime:             time.Nanosecond,
+		PermitWithoutStream: true,
+	}
+	var listener net.Listener
+	grpcOpts := []grpc.ServerOption{
+		// The limiting factor for lowering the max message size is the fact
+		// that a single large kv can be sent over the network in one message.
+		// Our maximum kv size is unlimited, so we need this to be very large.
+		//
+		// TODO(peter,tamird): need tests before lowering.
+		grpc.MaxRecvMsgSize(math.MaxInt32),
+		grpc.MaxSendMsgSize(math.MaxInt32),
+		// The default number of concurrent streams/requests on a client connection
+		// is 100, while the server is unlimited. The client setting can only be
+		// controlled by adjusting the server value. Set a very large value for the
+		// server value so that we have no fixed limit on the number of concurrent
+		// streams/requests on either the client or server.
+		grpc.MaxConcurrentStreams(math.MaxInt32),
+		grpc.KeepaliveParams(ka),
+		grpc.KeepaliveEnforcementPolicy(ke),
+		// A stats handler to measure server network stats.
+		// grpc.StatsHandler(&ctx.stats),
+	}
+
+	if !s.dwindow {
+		// Adjust the stream and connection window sizes to cockroach defaults,
+		// This disables dynamic window resizing.
+		grpcOpts = append(
+			grpcOpts,
+			grpc.InitialWindowSize(initialWindowSize),
+			grpc.InitialConnWindowSize(initialConnWindowSize),
+		)
+	}
 
 	listener, err = net.Listen("tcp", ":"+strconv.Itoa(s.port))
 	if err != nil {

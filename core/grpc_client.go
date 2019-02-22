@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip"
+	"google.golang.org/grpc/keepalive"
 )
 
 // ClientGRPC provides the implementation of a file
@@ -28,14 +29,29 @@ type ClientGRPCConfig struct {
 	ChunkSize       int
 	RootCertificate string
 	Compress        bool
+	DWindow         bool
 }
 
-func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
-	var grpcOpts []grpc.DialOption
+const (
+	defaultWindowSize     = 65535
+	initialWindowSize     = defaultWindowSize * 32 // for an RPC
+	initialConnWindowSize = initialWindowSize * 16 // for a connection
+)
 
+func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
 	if cfg.Address == "" {
 		err = errors.Errorf("address must be specified")
 		return
+	}
+
+	// Cockroach defaults.
+	grpcOpts := []grpc.DialOption{
+		grpc.WithBackoffMaxDelay(time.Second),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                3 * time.Second,
+			Timeout:             3 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	}
 
 	if cfg.Compress {
@@ -43,14 +59,19 @@ func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
 			grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")))
 	}
 
+	if !cfg.DWindow {
+		// Set to cockroach defaults.
+		grpcOpts = append(grpcOpts,
+			grpc.WithInitialWindowSize(initialWindowSize),
+			grpc.WithInitialConnWindowSize(initialConnWindowSize),
+		)
+	}
+
 	grpcOpts = append(grpcOpts, grpc.WithInsecure())
 
 	switch {
 	case cfg.ChunkSize == 0:
 		err = errors.Errorf("ChunkSize must be specified")
-		return
-	case cfg.ChunkSize > (1 << 22):
-		err = errors.Errorf("ChunkSize must be < than 4MB")
 		return
 	default:
 		c.chunkSize = cfg.ChunkSize

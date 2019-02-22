@@ -15,6 +15,10 @@ var Serve = cli.Command{
 			Usage: "port to bind to",
 			Value: 1313,
 		},
+		&cli.BoolFlag{
+			Name:  "dwindow",
+			Usage: "whether to use GRPC dynamic window resizing",
+		},
 	},
 }
 
@@ -23,6 +27,7 @@ func serveAction(c *cli.Context) (err error) {
 		port        = c.Int("port")
 		key         = c.String("key")
 		certificate = c.String("certificate")
+		dwindow     = c.Bool("dwindow")
 		server      core.Server
 	)
 
@@ -30,6 +35,7 @@ func serveAction(c *cli.Context) (err error) {
 		Port:        port,
 		Certificate: certificate,
 		Key:         key,
+		DWindow:     dwindow,
 	})
 	must(err)
 	server = &grpcServer
