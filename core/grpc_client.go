@@ -59,7 +59,13 @@ func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
 			grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")))
 	}
 
+	c.logger = zerolog.New(os.Stdout).
+		With().
+		Str("from", "client").
+		Logger()
+
 	if !cfg.DWindow {
+		c.logger.Info().Msg("disabling dynamic window on client, setting to large cockroach defaults")
 		// Set to cockroach defaults.
 		grpcOpts = append(grpcOpts,
 			grpc.WithInitialWindowSize(initialWindowSize),
@@ -76,11 +82,6 @@ func NewClientGRPC(cfg ClientGRPCConfig) (c ClientGRPC, err error) {
 	default:
 		c.chunkSize = cfg.ChunkSize
 	}
-
-	c.logger = zerolog.New(os.Stdout).
-		With().
-		Str("from", "client").
-		Logger()
 
 	c.conn, err = grpc.Dial(cfg.Address, grpcOpts...)
 	if err != nil {

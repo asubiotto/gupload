@@ -86,6 +86,7 @@ func (s *ServerGRPC) Listen() (err error) {
 	}
 
 	if !s.dwindow {
+		s.logger.Info().Msg("disabling dynamic window sizing on server, setting to cockroach large defaults")
 		// Adjust the stream and connection window sizes to cockroach defaults,
 		// This disables dynamic window resizing.
 		grpcOpts = append(
@@ -116,7 +117,7 @@ func (s *ServerGRPC) Listen() (err error) {
 }
 
 func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error {
-	f, err := os.Create("data.json")
+	f, err := os.Create("data.csv")
 	if err != nil {
 		s.logger.Error().Msg(fmt.Sprintf("errors opening data file: %s", err.Error()))
 		return err
