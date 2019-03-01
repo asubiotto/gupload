@@ -1,0 +1,34 @@
+#!/bin/bash
+set -x
+
+for i in 0 5 30 60;
+do
+    roachprod run alfonso-grpc 'sudo tc qdisc del dev ens5 root netem'
+    rtt=$(($i*2))
+    roachprod run alfonso-grpc 'sudo tc qdisc add dev ens5 root netem delay '$i'ms'
+    parentdir=$rtt'ms'
+    mkdir $parentdir
+    for mb in 2 4 8 16 32;
+    do
+        mbdir=$parentdir'/'$mb'mb'
+        mkdir $mbdir
+        for dwindow in "" "-dwindow";
+        do
+            size=$(($mb<<20))
+            roachprod run alfonso-grpc:1 './gupload serve '$dwindow' --reportatbytes='$size &
+            for i in `seq 1 20`;
+            do
+                # Run client.
+                roachprod run alfonso-grpc:2 './gupload upload --file 100mb '$dwindow' --address=alfonso-grpc-0001:1313 --chunk-size='$size
+            done
+            dw=dwT
+            if [ -z $dwindow ];
+            then
+                dw=dwF
+            fi
+
+            roachprod get alfonso-grpc:1 raf.csv $mbdir/$dw$mb'MBcs'$mb'MBl'$rtt'ms.csv'
+            roachprod run alfonso-grpc:1 'killall gupload'
+        done
+    done
+done
