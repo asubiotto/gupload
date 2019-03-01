@@ -22,6 +22,7 @@ import (
 
 type ServerGRPC struct {
 	logger        zerolog.Logger
+	reportAtFile  *os.File
 	server        *grpc.Server
 	port          int
 	certificate   string
@@ -39,6 +40,12 @@ type ServerGRPCConfig struct {
 }
 
 func NewServerGRPC(cfg ServerGRPCConfig) (s ServerGRPC, err error) {
+	if cfg.ReportAtBytes != 0 {
+		s.reportAtFile, err = os.Create("raf.csv")
+		if err != nil {
+			return
+		}
+	}
 	s.logger = zerolog.New(os.Stdout).
 		With().
 		Str("from", "server").
@@ -158,6 +165,7 @@ func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error 
 	}()
 
 	start := time.Now()
+	rabPrinted := false
 	for {
 		c, err := stream.Recv()
 		if err != nil {
@@ -169,10 +177,11 @@ func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error 
 				"failed unexpectedly while reading chunks from stream")
 		}
 		newBytesReceived := atomic.AddUint64(&bytesReceived, uint64(len(c.Content)))
-		if s.reportatbytes != 0 && newBytesReceived >= s.reportatbytes {
-			// Only print once.
-			s.reportatbytes = 0
-			s.logger.Info().Msg(fmt.Sprintf("took %s to receive %s", time.Since(start), humanize.Bytes(newBytesReceived)))
+		if !rabPrinted && s.reportatbytes != 0 && newBytesReceived >= s.reportatbytes {
+			timeToRecv := time.Since(start)
+			s.logger.Info().Msg(fmt.Sprintf("took %s to receive %s", timeToRecv, humanize.Bytes(newBytesReceived)))
+			s.reportAtFile.WriteString(fmt.Sprintf("%d", timeToRecv))
+			rabPrinted = true
 		}
 	}
 
@@ -192,6 +201,7 @@ END:
 }
 
 func (s *ServerGRPC) Close() {
+	s.reportAtFile.Close()
 	if s.server != nil {
 		s.server.Stop()
 	}
