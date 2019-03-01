@@ -21,19 +21,21 @@ import (
 )
 
 type ServerGRPC struct {
-	logger      zerolog.Logger
-	server      *grpc.Server
-	port        int
-	certificate string
-	key         string
-	dwindow     bool
+	logger        zerolog.Logger
+	server        *grpc.Server
+	port          int
+	certificate   string
+	key           string
+	dwindow       bool
+	reportatbytes uint64
 }
 
 type ServerGRPCConfig struct {
-	Certificate string
-	Key         string
-	Port        int
-	DWindow     bool
+	Certificate   string
+	Key           string
+	Port          int
+	DWindow       bool
+	ReportAtBytes uint64
 }
 
 func NewServerGRPC(cfg ServerGRPCConfig) (s ServerGRPC, err error) {
@@ -51,6 +53,7 @@ func NewServerGRPC(cfg ServerGRPCConfig) (s ServerGRPC, err error) {
 	s.certificate = cfg.Certificate
 	s.key = cfg.Key
 	s.dwindow = cfg.DWindow
+	s.reportatbytes = cfg.ReportAtBytes
 
 	return
 }
@@ -154,6 +157,7 @@ func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error 
 		}
 	}()
 
+	start := time.Now()
 	for {
 		c, err := stream.Recv()
 		if err != nil {
@@ -162,9 +166,14 @@ func (s *ServerGRPC) Upload(stream messaging.GuploadService_UploadServer) error 
 			}
 
 			return errors.Wrapf(err,
-				"failed unexpectadely while reading chunks from stream")
+				"failed unexpectedly while reading chunks from stream")
 		}
-		atomic.AddUint64(&bytesReceived, uint64(len(c.Content)))
+		newBytesReceived := atomic.AddUint64(&bytesReceived, uint64(len(c.Content)))
+		if s.reportatbytes != 0 && newBytesReceived >= s.reportatbytes {
+			// Only print once.
+			s.reportatbytes = 0
+			s.logger.Info().Msg(fmt.Sprintf("took %s to receive %s", time.Since(start), humanize.Bytes(newBytesReceived)))
+		}
 	}
 
 	s.logger.Info().Msg("upload received")

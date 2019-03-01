@@ -19,23 +19,29 @@ var Serve = cli.Command{
 			Name:  "dwindow",
 			Usage: "whether to use GRPC dynamic window resizing",
 		},
+		&cli.Uint64Flag{
+			Name:  "reportatbytes",
+			Usage: "reports the time taken to receive reportatbytes",
+		},
 	},
 }
 
 func serveAction(c *cli.Context) (err error) {
 	var (
-		port        = c.Int("port")
-		key         = c.String("key")
-		certificate = c.String("certificate")
-		dwindow     = c.Bool("dwindow")
-		server      core.Server
+		port          = c.Int("port")
+		key           = c.String("key")
+		certificate   = c.String("certificate")
+		dwindow       = c.Bool("dwindow")
+		reportatbytes = c.Uint64("reportatbytes")
+		server        core.Server
 	)
 
 	grpcServer, err := core.NewServerGRPC(core.ServerGRPCConfig{
-		Port:        port,
-		Certificate: certificate,
-		Key:         key,
-		DWindow:     dwindow,
+		Port:          port,
+		Certificate:   certificate,
+		Key:           key,
+		DWindow:       dwindow,
+		ReportAtBytes: reportatbytes,
 	})
 	must(err)
 	server = &grpcServer
